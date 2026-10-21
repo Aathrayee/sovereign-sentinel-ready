@@ -1,0 +1,7 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "deploy": {
+    "startCommand": "java -jar target/sentinel-api.jar",
+    "healthcheckPath": "/api/public/health"
+  }
+}

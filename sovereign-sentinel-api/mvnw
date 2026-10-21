@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")"
+if command -v mvn >/dev/null 2>&1; then
+  exec mvn "$@"
+fi
+V=3.9.11
+DIR=".tools/apache-maven-$V"
+if [ ! -x "$DIR/bin/mvn" ]; then
+  mkdir -p .tools
+  URL="https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/$V/apache-maven-$V-bin.tar.gz"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fLsS "$URL" -o .tools/apache-maven.tar.gz
+  elif command -v wget >/dev/null 2>&1; then
+    wget -q "$URL" -O .tools/apache-maven.tar.gz
+  else
+    echo 'Install Maven or curl to proceed.' >&2
+    exit 1
+  fi
+  tar -xzf .tools/apache-maven.tar.gz -C .tools
+  rm -f .tools/apache-maven.tar.gz
+fi
+exec "$DIR/bin/mvn" "$@"

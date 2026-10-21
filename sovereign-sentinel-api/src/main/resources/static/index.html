@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Watchdog | Service Monitor</title>
+  <style>
+    :root {
+      --background: #f5f6f8;
+      --surface: #ffffff;
+      --border: #dce1e6;
+      --text: #222b36;
+      --muted: #657180;
+      --blue: #315f91;
+      --blue-hover: #274e78;
+      --green: #247346;
+      --red: #b23b3b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--text);
+      font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 32px 20px 56px; }
+    .page-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; }
+    h1 { font-size: 25px; margin: 0; font-weight: 650; }
+    h2 { font-size: 16px; margin: 0 0 16px; font-weight: 650; }
+    p { margin: 8px 0; }
+    .subtitle, .muted { color: var(--muted); }
+    .subtitle { margin: 2px 0 0; }
+    .host { color: var(--muted); font-size: 12px; border: 1px solid var(--border); background: var(--surface); padding: 6px 10px; border-radius: 5px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 22px; }
+    .overview { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; margin-bottom: 18px; align-items: center; }
+    .field-label { color: var(--muted); font-size: 12px; font-weight: 550; }
+    .system-state { font-size: 27px; font-weight: 700; margin: 7px 0 3px; }
+    .system-state.active { color: var(--green); }
+    .system-state.lockdown { color: var(--red); }
+    .system-state.unknown { color: var(--muted); }
+    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .metric-value { font-size: 21px; font-weight: 650; margin-top: 4px; overflow-wrap: anywhere; }
+    .date-value { margin-top: 5px; overflow-wrap: anywhere; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .wide { grid-column: 1 / -1; }
+    label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 13px; }
+    input { font: inherit; width: 100%; padding: 10px 12px; border: 1px solid #bfc8d1; border-radius: 5px; background: white; color: var(--text); }
+    input:focus-visible, button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 14px; }
+    button { font: inherit; border: 1px solid var(--blue); border-radius: 5px; padding: 9px 13px; background: var(--blue); color: white; font-weight: 600; cursor: pointer; }
+    button:hover { background: var(--blue-hover); }
+    button.secondary { background: white; color: var(--blue); }
+    button.secondary:hover { background: #f0f4f8; }
+    button:disabled { opacity: .55; cursor: wait; }
+    .help { font-size: 12px; color: var(--muted); margin: 13px 0 0; }
+    .feedback { font-size: 13px; margin: 13px 0 0; color: var(--muted); min-height: 20px; }
+    .feedback.error { color: var(--red); }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0 4px; }
+    .stat { background: #f7f8fa; border: 1px solid #e8ebee; border-radius: 5px; padding: 12px; }
+    .stat-number { font-size: 22px; font-weight: 650; margin-top: 3px; }
+    pre { margin: 0; padding: 16px; background: #f7f8fa; border: 1px solid var(--border); border-radius: 5px; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow-y: auto; font: 12px/1.55 Consolas, "Courier New", monospace; }
+    .footer { color: var(--muted); font-size: 12px; margin-top: 22px; }
+    @media (max-width: 720px) {
+      .page-header { align-items: flex-start; flex-direction: column; }
+      .overview, .grid { grid-template-columns: 1fr; }
+      .wide { grid-column: auto; }
+      .card { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="page-header">
+      <div>
+        <h1>Watchdog</h1>
+        <p class="subtitle">Service monitor</p>
+      </div>
+      <span class="host" id="host"></span>
+    </header>
+
+    <section class="card overview" aria-label="Heartbeat summary">
+      <div>
+        <div class="field-label">HEARTBEAT STATUS</div>
+        <div class="system-state unknown" id="state">Not checked</div>
+        <p class="muted" id="stateHelp">Check the current status using your API key.</p>
+      </div>
+      <div class="metrics">
+        <div>
+          <div class="field-label">TIME REMAINING</div>
+          <div class="metric-value" id="countdown">--:--:--</div>
+        </div>
+        <div>
+          <div class="field-label">LAST HEARTBEAT</div>
+          <div class="date-value" id="lastPing">—</div>
+        </div>
+        <div>
+          <div class="field-label">EXPIRES AT</div>
+          <div class="date-value" id="deadline">—</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Heartbeat</h2>
+        <label for="apiKey">API key</label>
+        <input id="apiKey" type="password" autocomplete="off" placeholder="Enter API key">
+        <div class="actions">
+          <button id="checkBtn">Check status</button>
+          <button id="pingBtn" class="secondary">Send heartbeat</button>
+        </div>
+        <p class="feedback" id="feedback" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="card">
+        <h2>Request limits</h2>
+        <p class="muted">Limit: 30 requests per 60 seconds, per connecting IP.</p>
+        <div class="stats">
+          <div class="stat"><div class="field-label">TOTAL</div><div class="stat-number" id="totalRequests">—</div></div>
+          <div class="stat"><div class="field-label">BLOCKED</div><div class="stat-number" id="blockedRequests">—</div></div>
+          <div class="stat"><div class="field-label">CLIENTS</div><div class="stat-number" id="trackedClients">—</div></div>
+        </div>
+        <div class="actions">
+          <button id="statsBtn" class="secondary">Refresh counts</button>
+          <button id="burstBtn">Test 35 requests</button>
+        </div>
+        <p class="help" id="burstResult" role="status" aria-live="polite">Counters reset when the server restarts.</p>
+      </section>
+
+      <section class="card">
+        <h2>Request inspection</h2>
+        <p class="muted">Compare the normal response with the response to a bot-labelled request.</p>
+        <div class="actions">
+          <button id="humanBtn" class="secondary">Normal request</button>
+          <button id="botBtn">Bot-labelled request</button>
+        </div>
+        <p class="help">The bot check uses request headers. It cannot reliably identify automated clients.</p>
+      </section>
+
+      <section class="card">
+        <h2>API response</h2>
+        <pre id="output" aria-live="polite">No request sent yet.</pre>
+      </section>
+    </div>
+
+    <p class="footer">Lockdown is an application state; it does not stop the server. Rate-limit counters are stored in memory.</p>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let currentDeadline = null;
+    let currentState = null;
+
+    $('host').textContent = location.host;
+    if (['localhost', '127.0.0.1'].includes(location.hostname)) {
+      $('apiKey').value = 'local-demo-key';
+    }
+
+    const formatDate = (date) => date ? new Date(date).toLocaleString() : '—';
+
+    function updateTimer() {
+      if (currentState === 'LOCKDOWN') {
+        $('countdown').textContent = 'Expired';
+        return;
+      }
+      if (!currentDeadline || currentState !== 'ACTIVE') return;
+
+      const seconds = Math.max(0, Math.floor((Date.parse(currentDeadline) - Date.now()) / 1000));
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const remainingSeconds = seconds % 60;
+      $('countdown').textContent = [hours, minutes, remainingSeconds]
+        .map((part) => String(part).padStart(2, '0'))
+        .join(':');
+    }
+
+    setInterval(updateTimer, 1000);
+
+    function apiKeyHeader() {
+      return { 'X-Sentinel-Key': $('apiKey').value };
+    }
+
+    function showFeedback(message, error = false) {
+      $('feedback').textContent = message;
+      $('feedback').className = error ? 'feedback error' : 'feedback';
+    }
+
+    async function apiRequest(path, method = 'GET', headers = {}, showResponse = true) {
+      try {
+        const response = await fetch(path, { method, headers, cache: 'no-store' });
+        const data = await response.json();
+        if (showResponse) $('output').textContent = JSON.stringify(data, null, 2);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}${response.status === 401 ? ' (check API key)' : ''}`);
+        }
+        return data;
+      } catch (error) {
+        showFeedback(error.message, true);
+        return null;
+      }
+    }
+
+    function showStatus(data) {
+      if (!data) return;
+      currentState = data.status;
+      currentDeadline = data.deadline;
+      $('state').textContent = data.status;
+      $('state').className = 'system-state ' + (data.status === 'ACTIVE' ? 'active' : 'lockdown');
+      $('stateHelp').textContent = data.status === 'ACTIVE'
+        ? 'Heartbeat is current.'
+        : 'No heartbeat received within the last 24 hours.';
+      $('lastPing').textContent = formatDate(data.lastPing);
+      $('deadline').textContent = formatDate(data.deadline);
+      updateTimer();
+    }
+
+    async function refreshTraffic() {
+      const data = await apiRequest('/api/vault/traffic', 'GET', apiKeyHeader(), false);
+      if (!data) return;
+      $('totalRequests').textContent = data.totalRequests;
+      $('blockedRequests').textContent = data.blockedRequests;
+      $('trackedClients').textContent = data.trackedClients;
+    }
+
+    $('checkBtn').onclick = async () => {
+      const data = await apiRequest('/api/vault/status', 'GET', apiKeyHeader());
+      if (data) { showStatus(data); showFeedback('Status updated.'); }
+    };
+
+    $('pingBtn').onclick = async () => {
+      const data = await apiRequest('/api/vault/ping', 'POST', apiKeyHeader());
+      if (data) { showStatus(data); showFeedback('Heartbeat sent.'); }
+    };
+
+    $('statsBtn').onclick = refreshTraffic;
+
+    $('humanBtn').onclick = async () => {
+      const data = await apiRequest('/api/public/stealth');
+      if (data) { showFeedback('Request complete.'); await refreshTraffic(); }
+    };
+
+    $('botBtn').onclick = async () => {
+      const data = await apiRequest('/api/public/stealth', 'GET', { 'X-Sentinel-Demo-Bot': 'true' });
+      if (data) { showFeedback('Request complete.'); await refreshTraffic(); }
+    };
+
+    $('burstBtn').onclick = async () => {
+      const button = $('burstBtn');
+      button.disabled = true;
+      $('burstResult').textContent = 'Sending requests...';
+      let allowed = 0;
+      let blocked = 0;
+      let other = 0;
+      let lastResponse = null;
+
+      try {
+        for (let i = 0; i < 35; i++) {
+          const response = await fetch('/api/public/stealth', { cache: 'no-store' });
+          if (response.status === 200) allowed++;
+          else if (response.status === 429) blocked++;
+          else other++;
+          lastResponse = await response.json();
+        }
+        $('burstResult').textContent = `${allowed} allowed, ${blocked} blocked${other ? `, ${other} other responses` : ''}.`;
+        $('output').textContent = JSON.stringify(lastResponse, null, 2);
+        showFeedback('Request test complete.');
+        await refreshTraffic();
+      } catch (error) {
+        $('burstResult').textContent = 'Request test failed: ' + error.message;
+        showFeedback(error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    };
+
+    if (['localhost', '127.0.0.1'].includes(location.hostname)) {
+      $('checkBtn').click();
+      refreshTraffic();
+    }
+  </script>
+</body>
+</html>
